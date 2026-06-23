@@ -53,13 +53,47 @@ public class ZhiLian {
         String jobId;
         String jobTitle;
         String companyName;
+        boolean filtered;
+        String filterReason;
 
-        PageJob(int index, String jobId, String jobTitle, String companyName) {
+        PageJob(int index, String jobId, String jobTitle, String companyName, boolean filtered, String filterReason) {
             this.index = index;
             this.jobId = jobId;
             this.jobTitle = jobTitle;
             this.companyName = companyName;
+            this.filtered = filtered;
+            this.filterReason = filterReason;
         }
+    }
+
+    /** 代招岗位标记关键词（卡片文本命中任一即视为代招） */
+    private static final String[] PROXY_MARKERS = {"代招", "代理招聘", "招聘代理"};
+
+    /**
+     * 是否命中黑名单关键词（匹配岗位标题或公司名）
+     */
+    private boolean isBlacklisted(String jobTitle, String companyName) {
+        List<String> blacks = config.getBlackKeywords();
+        if (blacks == null || blacks.isEmpty()) return false;
+        String title = jobTitle == null ? "" : jobTitle;
+        String company = companyName == null ? "" : companyName;
+        for (String bk : blacks) {
+            if (bk == null || bk.isBlank()) continue;
+            if (title.contains(bk) || company.contains(bk)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 是否为代招岗位（仅在开启过滤代招时判断，依据卡片整体文本中的标记词）
+     */
+    private boolean isProxyRecruit(String cardText) {
+        if (!config.isFilterProxy()) return false;
+        if (cardText == null || cardText.isEmpty()) return false;
+        for (String marker : PROXY_MARKERS) {
+            if (cardText.contains(marker)) return true;
+        }
+        return false;
     }
 
     /**
@@ -255,6 +289,23 @@ public class ZhiLian {
 
                 String jobId = extractJobIdFromLink(jobLink);
 
+                // 过滤判断：黑名单关键词 / 代招岗位
+                boolean filtered = false;
+                String filterReason = null;
+                if (isBlacklisted(jobTitle, companyName)) {
+                    filtered = true;
+                    filterReason = "黑名单关键词";
+                } else if (config.isFilterProxy()) {
+                    String cardText = safeGetCardText(card);
+                    if (isProxyRecruit(cardText)) {
+                        filtered = true;
+                        filterReason = "代招岗位";
+                    }
+                }
+                if (filtered) {
+                    log.info("过滤岗位[{}]：title={}，company={}", filterReason, jobTitle, companyName);
+                }
+
                 try {
                     String jid = jobId == null ? "" : jobId.trim();
                     String jtitle = jobTitle == null ? "" : jobTitle.trim();
@@ -277,7 +328,7 @@ public class ZhiLian {
                             entity.setExperience(experience);
                             entity.setDegree(degree);
                             entity.setCompanyName(companyName);
-                            entity.setDeliveryStatus("未投递");
+                            entity.setDeliveryStatus(filtered ? "已过滤" : "未投递");
                             toInsert.add(entity);
                         }
                     }
@@ -285,7 +336,7 @@ public class ZhiLian {
                     log.warn("采集岗位数据失败: {}", ex.getMessage());
                 }
 
-                jobs.add(new PageJob(i, jobId, jobTitle, companyName));
+                jobs.add(new PageJob(i, jobId, jobTitle, companyName, filtered, filterReason));
             }
 
             // 统一保存采集到的一整页岗位
@@ -304,6 +355,11 @@ public class ZhiLian {
                 if (shouldStop()) {
                     sendProgress("用户取消投递或已达上限", null, null);
                     return false;
+                }
+
+                if (pj.filtered) {
+                    log.info("跳过投递[{}]：title={}，company={}", pj.filterReason, pj.jobTitle, pj.companyName);
+                    continue;
                 }
 
                 Locator card = page.locator("div.joblist-box__item").nth(pj.index);
@@ -590,6 +646,19 @@ public class ZhiLian {
             log.debug("获取文本失败: {}", e.getMessage());
         }
         return "";
+    }
+
+    /**
+     * 安全获取整张岗位卡片的文本（用于代招标记检测）
+     */
+    private String safeGetCardText(Locator card) {
+        try {
+            String text = card.textContent();
+            return text == null ? "" : text;
+        } catch (Exception e) {
+            log.debug("获取卡片文本失败: {}", e.getMessage());
+            return "";
+        }
     }
 
     /**

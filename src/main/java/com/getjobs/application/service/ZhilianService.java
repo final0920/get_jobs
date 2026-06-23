@@ -48,11 +48,19 @@ public class ZhilianService {
             config.setKeywords(new ArrayList<>());
             config.setCityCode("0");
             config.setSalary("0");
+            config.setBlackKeywords(new ArrayList<>());
+            config.setFilterProxy(false);
             return config;
         }
 
         // 关键词解析：支持逗号或括号列表
         config.setKeywords(parseListString(entity.getKeywords()));
+
+        // 黑名单关键词解析（同关键词格式）
+        config.setBlackKeywords(parseListString(entity.getBlackKeywords()));
+
+        // 是否过滤代招岗位
+        config.setFilterProxy(entity.getFilterProxy() != null && entity.getFilterProxy() == 1);
 
         // 城市：中文名映射到代码；缺省或“不限”映射为 0
         String city = safeTrim(entity.getCityCode());
@@ -127,6 +135,8 @@ public class ZhilianService {
             toInsert.setKeywords(incoming.getKeywords());
             toInsert.setCityCode(incoming.getCityCode());
             toInsert.setSalary(incoming.getSalary());
+            toInsert.setBlackKeywords(incoming.getBlackKeywords());
+            toInsert.setFilterProxy(incoming.getFilterProxy());
             toInsert.setCreatedAt(now);
             toInsert.setUpdatedAt(now);
             zhilianConfigMapper.insert(toInsert);
@@ -137,6 +147,8 @@ public class ZhilianService {
             if (incoming.getKeywords() != null) toUpdate.setKeywords(incoming.getKeywords());
             if (incoming.getCityCode() != null) toUpdate.setCityCode(incoming.getCityCode());
             if (incoming.getSalary() != null) toUpdate.setSalary(incoming.getSalary());
+            if (incoming.getBlackKeywords() != null) toUpdate.setBlackKeywords(incoming.getBlackKeywords());
+            if (incoming.getFilterProxy() != null) toUpdate.setFilterProxy(incoming.getFilterProxy());
             toUpdate.setCreatedAt(first.getCreatedAt());
             toUpdate.setUpdatedAt(now);
             zhilianConfigMapper.updateById(toUpdate);
@@ -201,6 +213,24 @@ public class ZhilianService {
             log.info("确保 zhilian_data 表已存在");
         } catch (Exception e) {
             log.warn("创建 zhilian_data 表失败: {}", e.getMessage());
+        }
+
+        // 迁移：为 zhilian_config 增加黑名单与代招过滤字段（幂等）
+        try (Connection conn = dataSource.getConnection(); Statement stmt = conn.createStatement()) {
+            Set<String> cols = new HashSet<>();
+            try (java.sql.ResultSet rs = stmt.executeQuery("PRAGMA table_info(zhilian_config)")) {
+                while (rs.next()) cols.add(rs.getString("name"));
+            }
+            if (!cols.contains("black_keywords")) {
+                stmt.execute("ALTER TABLE zhilian_config ADD COLUMN black_keywords VARCHAR(500)");
+                log.info("zhilian_config 新增列 black_keywords");
+            }
+            if (!cols.contains("filter_proxy")) {
+                stmt.execute("ALTER TABLE zhilian_config ADD COLUMN filter_proxy INTEGER DEFAULT 0");
+                log.info("zhilian_config 新增列 filter_proxy");
+            }
+        } catch (Exception e) {
+            log.warn("迁移 zhilian_config 字段失败: {}", e.getMessage());
         }
     }
 

@@ -60,6 +60,9 @@ public class PlaywrightManager {
     // 智联招聘页面（预留）
     private Page zhilianPage;
 
+    // 鱼泡直聘页面
+    private Page yupaoPage;
+
     // 登录状态追踪（平台 -> 是否已登录）
     private final Map<String, Boolean> loginStatus = new ConcurrentHashMap<>();
 
@@ -80,6 +83,11 @@ public class PlaywrightManager {
     // 记录智联招聘是否已处理过未登录引导（仅初始化时执行一次）
     private volatile boolean zhilianLoginGuided = false;
 
+    // 控制是否暂停对yupaoPage的后台监控
+    private volatile boolean yupaoMonitoringPaused = false;
+    // 记录鱼泡是否已处理过未登录引导
+    private volatile boolean yupaoLoginGuided = false;
+
     // 默认超时时间（毫秒）
   private static final int DEFAULT_TIMEOUT = 30000;
 
@@ -91,10 +99,12 @@ public class PlaywrightManager {
     private static final String LIEPIN_URL = "https://www.liepin.com";
   private static final String JOB51_URL = "https://www.51job.com";
     private static final String ZHILIAN_URL = "https://www.zhaopin.com";
+    private static final String YUPAO_URL = "https://www.yupao.com";
     private static final String BOSS_DOMAIN = "zhipin.com";
     private static final String LIEPIN_DOMAIN = "liepin.com";
     private static final String JOB51_DOMAIN = "51job.com";
     private static final String ZHILIAN_DOMAIN = "zhaopin.com";
+    private static final String YUPAO_DOMAIN = "yupao.com";
     private static final String BOSS_INIT_SCRIPT_RESOURCE = "anti-detection.js";
     // 降噪：51job Cookie保存日志节流状态
     private volatile long last51CookieLogMs = 0L;
@@ -137,6 +147,7 @@ public class PlaywrightManager {
                             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"));
             log.info("✓ BrowserContext已创建（所有平台共享）");
             injectBossInitScript(context);
+            injectYupaoInitScript(context);
 
             // 顺序创建所有Page（避免并发创建Page导致的竞态条件）
             log.info("开始创建所有平台的Page...");
@@ -156,15 +167,20 @@ public class PlaywrightManager {
             zhilianPage.setDefaultTimeout(DEFAULT_TIMEOUT);
             log.info("✓ 智联招聘 Page已创建");
 
+            yupaoPage = context.newPage();
+            yupaoPage.setDefaultTimeout(DEFAULT_TIMEOUT);
+            log.info("✓ 鱼泡直聘 Page已创建");
+
             // 并发执行各平台的初始化逻辑（导航、Cookie加载等）
             log.info("开始并发初始化所有平台...");
             CompletableFuture<Void> bossFuture = CompletableFuture.runAsync(this::setupBossPlatform);
             CompletableFuture<Void> liepinFuture = CompletableFuture.runAsync(this::setupLiepinPlatform);
             CompletableFuture<Void> job51Future = CompletableFuture.runAsync(this::setup51jobPlatform);
             CompletableFuture<Void> zhilianFuture = CompletableFuture.runAsync(this::setupZhilianPlatform);
+            CompletableFuture<Void> yupaoFuture = CompletableFuture.runAsync(this::setupYupaoPlatform);
 
             // 等待所有平台初始化完成
-            CompletableFuture.allOf(bossFuture, liepinFuture, job51Future, zhilianFuture).join();
+            CompletableFuture.allOf(bossFuture, liepinFuture, job51Future, zhilianFuture, yupaoFuture).join();
 
             log.info("✓ 浏览器自动化引擎初始化完成（所有平台已并发启动）");
             log.info("========================================");
@@ -188,6 +204,29 @@ public class PlaywrightManager {
                 + script + "}}catch(e){}})();";
         targetContext.addInitScript(wrapped);
         log.info("Boss 反检测脚本已注入到Context: {}", BOSS_INIT_SCRIPT_RESOURCE);
+    }
+
+    /**
+     * 注入鱼泡加强版反检测脚本（仅对 yupao.com 生效）。
+     * 关键：伪装窗口尺寸（绕过 devtools 尺寸检测）+ 拦截跳转 about:blank（阻止反爬置空页面）+ console 防展开。
+     */
+    private void injectYupaoInitScript(BrowserContext targetContext) {
+        String script = "(function(){try{"
+                + "if(location&&location.hostname&&location.hostname.indexOf('yupao.com')!==-1){"
+                + "if(window.__yupaoAntiInjected){return;}window.__yupaoAntiInjected=true;"
+                + "try{Object.defineProperty(window,'outerWidth',{get:function(){return window.innerWidth;}});}catch(e){}"
+                + "try{Object.defineProperty(window,'outerHeight',{get:function(){return window.innerHeight;}});}catch(e){}"
+                + "try{Object.defineProperty(navigator,'webdriver',{get:function(){return false;}});}catch(e){}"
+                + "var isBlank=function(u){try{return String(u).indexOf('about:blank')!==-1;}catch(e){return false;}};"
+                + "try{var _a=window.location.assign.bind(window.location);window.location.assign=function(u){if(isBlank(u))return;return _a(u);};}catch(e){}"
+                + "try{var _r=window.location.replace.bind(window.location);window.location.replace=function(u){if(isBlank(u))return;return _r(u);};}catch(e){}"
+                + "try{var _o=window.open;window.open=function(u){if(isBlank(u))return null;return _o.apply(window,arguments);};}catch(e){}"
+                + "try{var f=function(a){return a.map(function(x){return (x&&typeof x==='object')?{}:x;});};"
+                + "['log','debug','info','warn','error','dir','table'].forEach(function(n){var o=console[n];"
+                + "if(typeof o==='function'){console[n]=function(){return o.apply(console,f([].slice.call(arguments)));};}});}catch(e){}"
+                + "}}catch(e){}})();";
+        targetContext.addInitScript(script);
+        log.info("鱼泡反检测脚本已注入到Context");
     }
 
     private String readResourceText(String resourcePath) {
@@ -1213,6 +1252,7 @@ public class PlaywrightManager {
             case "liepin" -> saveLiepinCookiesToDatabase(remark);
             case "51job" -> save51jobCookiesToDatabase(remark);
             case "zhilian" -> saveZhilianCookiesToDatabase(remark);
+            case "yupao" -> saveYupaoCookiesToDatabase(remark);
             default -> throw new IllegalArgumentException("Unsupported platform: " + platform);
         }
     }
@@ -1248,6 +1288,182 @@ public class PlaywrightManager {
     public void resumeZhilianMonitoring() {
         zhilianMonitoringPaused = false;
         log.debug("智联招聘登录监控已恢复");
+    }
+
+    // ==================== 鱼泡直聘 ====================
+
+    /** 设置鱼泡直聘平台（加载Cookie、导航、监控） */
+    private void setupYupaoPlatform() {
+        log.info("开始初始化鱼泡直聘平台...");
+        try {
+            CookieEntity cookieEntity = cookieService.getCookieByPlatform("yupao");
+            if (cookieEntity != null && cookieEntity.getCookieValue() != null && !cookieEntity.getCookieValue().isBlank()) {
+                List<Cookie> cookies = filterCookiesByDomain(parseCookiesFromString(cookieEntity.getCookieValue()), YUPAO_DOMAIN);
+                if (!cookies.isEmpty()) {
+                    context.addCookies(cookies);
+                    log.info("已从数据库加载鱼泡 Cookie并注入浏览器上下文，共 {} 条", cookies.size());
+                } else {
+                    log.warn("解析鱼泡Cookie失败，未能加载任何Cookie");
+                }
+            } else {
+                log.info("数据库未找到鱼泡Cookie或值为空，跳过Cookie注入");
+            }
+        } catch (Exception e) {
+            log.warn("从数据库加载鱼泡Cookie失败: {}", e.getMessage());
+        }
+
+        int maxRetries = 3;
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                yupaoPage.navigate(YUPAO_URL, new Page.NavigateOptions()
+                        .setTimeout(60000)
+                        .setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
+                break;
+            } catch (Exception e) {
+                boolean pageAccessible = false;
+                try {
+                    String url = yupaoPage.url();
+                    pageAccessible = url != null && url.contains("yupao.com");
+                } catch (Exception ignored) {}
+                if (pageAccessible) break;
+                if (attempt < maxRetries) {
+                    try { Thread.sleep(2000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                }
+            }
+        }
+
+        try {
+            yupaoPage.waitForLoadState(LoadState.NETWORKIDLE);
+        } catch (Exception e) {
+            log.debug("等待鱼泡页面网络空闲失败: {}", e.getMessage());
+        }
+
+        setLoginStatus("yupao", checkIfYupaoLoggedIn());
+        setupYupaoLoginMonitoring(yupaoPage);
+    }
+
+    /** 检查鱼泡是否已登录：未登录态首页存在“登录丨注册”入口 */
+    private boolean checkIfYupaoLoggedIn() {
+        try {
+            if (yupaoPage == null) return false;
+            int loginEntryCount = 0;
+            try {
+                loginEntryCount = yupaoPage.getByText("登录丨注册").count();
+            } catch (Exception ignored) {}
+            // 无登录入口判定为已登录
+            return loginEntryCount == 0;
+        } catch (Exception e) {
+            log.warn("鱼泡：检查登录状态异常: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /** 设置鱼泡登录状态监控 */
+    private void setupYupaoLoginMonitoring(Page page) {
+        page.onFrameNavigated(frame -> {
+            if (frame == page.mainFrame() && !yupaoMonitoringPaused) {
+                checkYupaoLoginStatus(page);
+            }
+        });
+        log.info("鱼泡直聘平台登录状态监控已启用");
+    }
+
+    private void checkYupaoLoginStatus(Page page) {
+        try {
+            boolean isLoggedIn = checkIfYupaoLoggedIn();
+            Boolean previousStatus = loginStatus.get("yupao");
+            if (isLoggedIn && (previousStatus == null || !previousStatus)) {
+                onYupaoLoginSuccess();
+            }
+        } catch (Exception e) {
+            log.debug("检查鱼泡平台登录状态时发生异常: {}", e.getMessage());
+        }
+    }
+
+    /** 主动触发鱼泡登录：打开登录弹窗并轮询登录成功 */
+    public void triggerYupaoLogin() {
+        try {
+            if (yupaoPage == null) {
+                throw new IllegalStateException("鱼泡直聘页面未初始化");
+            }
+            yupaoPage.navigate(YUPAO_URL, new Page.NavigateOptions()
+                    .setTimeout(60000)
+                    .setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
+            try { Thread.sleep(1500); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+
+            // 点击“登录丨注册”入口打开登录弹窗（扫码/验证码登录）
+            try {
+                Locator loginEntry = yupaoPage.getByText("登录丨注册").first();
+                if (loginEntry.count() > 0 && loginEntry.isVisible()) {
+                    loginEntry.click(new Locator.ClickOptions().setTimeout(DEFAULT_TIMEOUT));
+                    log.info("已打开鱼泡登录弹窗，等待用户扫码或验证码登录...");
+                } else {
+                    log.info("未检测到鱼泡登录入口，可能已登录");
+                }
+            } catch (Exception e) {
+                log.debug("打开鱼泡登录弹窗失败: {}", e.getMessage());
+            }
+
+            // 轮询登录成功（最多约120秒）
+            for (int i = 0; i < 40; i++) {
+                try { Thread.sleep(3000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+                if (checkIfYupaoLoggedIn()) {
+                    onYupaoLoginSuccess();
+                    return;
+                }
+            }
+            log.warn("等待鱼泡登录成功超时");
+        } catch (Exception e) {
+            log.error("触发鱼泡登录流程失败: {}", e.getMessage(), e);
+            throw new RuntimeException("触发鱼泡登录流程失败", e);
+        }
+    }
+
+    private void onYupaoLoginSuccess() {
+        log.info("鱼泡直聘平台登录成功");
+        setLoginStatus("yupao", true);
+        saveYupaoCookiesToDatabase("login success");
+    }
+
+    private void saveYupaoCookiesToDatabase(String remark) {
+        try {
+            List<com.microsoft.playwright.options.Cookie> cookies = filterCookiesByDomain(context.cookies(), YUPAO_DOMAIN);
+            String cookieJson = new ObjectMapper().writeValueAsString(cookies);
+            boolean result = cookieService.saveOrUpdateCookie("yupao", cookieJson, remark);
+            if (result) {
+                log.info("保存鱼泡Cookie成功，共 {} 条，remark={}", cookies.size(), remark);
+            }
+        } catch (Exception e) {
+            log.warn("保存鱼泡Cookie失败: {}", e.getMessage());
+        }
+    }
+
+    /** 主动保存鱼泡Cookie到数据库（用于调试/验证） */
+    public void saveYupaoCookiesToDb(String remark) {
+        saveYupaoCookiesToDatabase(remark);
+    }
+
+    /** 清理鱼泡上下文Cookie（共享上下文，等同清空全部） */
+    public void clearYupaoCookies() {
+        try {
+            if (context != null) {
+                context.clearCookies();
+                log.info("已清理共享上下文中的所有Cookie");
+            }
+        } catch (Exception e) {
+            log.error("清理鱼泡上下文Cookie失败: {}", e.getMessage(), e);
+            throw new RuntimeException("清理鱼泡上下文Cookie失败", e);
+        }
+    }
+
+    public void pauseYupaoMonitoring() {
+        yupaoMonitoringPaused = true;
+        log.debug("鱼泡直聘登录监控已暂停");
+    }
+
+    public void resumeYupaoMonitoring() {
+        yupaoMonitoringPaused = false;
+        log.debug("鱼泡直聘登录监控已恢复");
     }
 
     /**

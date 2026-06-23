@@ -16,9 +16,10 @@ java {
 }
 
 repositories {
+    // 国内镜像优先，加速依赖下载
+    maven { url = uri("https://maven.aliyun.com/repository/public") }
+    maven { url = uri("https://maven.aliyun.com/repository/spring") }
     mavenCentral()
-    // 国内镜像可选：
-    // maven { url = uri("https://maven.aliyun.com/repository/public") }
 }
 
 dependencies {

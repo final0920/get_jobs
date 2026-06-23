@@ -17,6 +17,8 @@ interface ZhilianConfig {
   keywords?: string
   cityCode?: string
   salary?: string
+  blackKeywords?: string
+  filterProxy?: number
 }
 
 interface Option { name: string; code: string }
@@ -33,7 +35,7 @@ export default function ZhilianPage() {
   const [logoutResult, setLogoutResult] = useState<{ success: boolean; message: string } | null>(null)
   const [backendAvailable, setBackendAvailable] = useState(true)
 
-  const [config, setConfig] = useState<ZhilianConfig>({ keywords: '', cityCode: '', salary: '' })
+  const [config, setConfig] = useState<ZhilianConfig>({ keywords: '', cityCode: '', salary: '', blackKeywords: '', filterProxy: 0 })
   const [options, setOptions] = useState<ZhilianOptions>({ city: [] })
   const [loadingConfig, setLoadingConfig] = useState(true)
 
@@ -121,6 +123,8 @@ export default function ZhilianPage() {
       if (data.config) {
         const normalized = { ...data.config }
         normalized.keywords = parseKeywordsFromDb(data.config.keywords)
+        normalized.blackKeywords = parseKeywordsFromDb(data.config.blackKeywords)
+        normalized.filterProxy = Number(data.config.filterProxy) === 1 ? 1 : 0
         setConfig(normalized)
       }
       if (data.options) setOptions(data.options)
@@ -199,7 +203,12 @@ export default function ZhilianPage() {
 
   const handleSaveConfig = async () => {
     try {
-      const payload = { ...config, keywords: serializeKeywordsForDb(config.keywords) }
+      const payload = {
+        ...config,
+        keywords: serializeKeywordsForDb(config.keywords),
+        blackKeywords: serializeKeywordsForDb(config.blackKeywords),
+        filterProxy: config.filterProxy ? 1 : 0,
+      }
       const response = await fetch('http://localhost:8888/api/zhilian/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -320,6 +329,26 @@ export default function ZhilianPage() {
                       value={config.salary || ''}
                       onChange={(e) => setConfig((c) => ({ ...c, salary: e.target.value }))}
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>黑名单关键词（逗号分隔，命中标题或公司则不投递）</Label>
+                    <Input
+                      placeholder="如：外包, 销售, 电话客服"
+                      value={config.blackKeywords || ''}
+                      onChange={(e) => setConfig((c) => ({ ...c, blackKeywords: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>过滤代招岗位</Label>
+                    <label className="flex items-center gap-2 h-10 px-1 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-purple-500"
+                        checked={config.filterProxy === 1}
+                        onChange={(e) => setConfig((c) => ({ ...c, filterProxy: e.target.checked ? 1 : 0 }))}
+                      />
+                      <span className="text-sm text-muted-foreground">开启后自动跳过标记为“代招/代理招聘”的岗位</span>
+                    </label>
                   </div>
                 </div>
               )}

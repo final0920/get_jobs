@@ -28,6 +28,16 @@ public class ZhilianConfig {
      */
     private String salary;
 
+    /**
+     * 黑名单关键词：命中岗位标题或公司名则过滤不投递
+     */
+    private List<String> blackKeywords;
+
+    /**
+     * 是否自动过滤代招岗位
+     */
+    private boolean filterProxy;
+
 
     // 注意：已改为在 ZhilianJobService 中通过 ConfigService 构建配置
     // 保留空的 init 以兼容旧调用，但建议不要再使用

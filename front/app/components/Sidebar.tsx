@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { BiEnvelope, BiBriefcase, BiSearch, BiTask, BiUserCircle, BiBrain, BiMoon, BiSun } from 'react-icons/bi'
+import { BiEnvelope, BiBriefcase, BiSearch, BiTask, BiUserCircle, BiBrain, BiMoon, BiSun, BiWater } from 'react-icons/bi'
 import { motion } from 'framer-motion'
 import { useTheme } from 'next-themes'
 
@@ -73,6 +73,7 @@ export default function Sidebar() {
     { href: '/liepin', icon: BiSearch, label: '猎聘', color: 'text-purple-300' },
     { href: '/51job', icon: BiTask, label: '51job', color: 'text-blue-300' },
     { href: '/zhilian', icon: BiUserCircle, label: '智联招聘', color: 'text-cyan-300' },
+    { href: '/yupao', icon: BiWater, label: '鱼泡直聘', color: 'text-sky-300' },
   ]
 
   return (
