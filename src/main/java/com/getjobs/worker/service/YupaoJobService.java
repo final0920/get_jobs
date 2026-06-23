@@ -89,6 +89,9 @@ public class YupaoJobService implements JobPlatformService {
         if (isRunning) {
             log.info("收到停止鱼泡直聘投递任务的请求");
             shouldStop = true;
+            // 协作式停止兜底：直接释放运行状态，确保卡在反爬/阻塞调用时也能重启
+            isRunning = false;
+            try { playwrightManager.resumeYupaoMonitoring(); } catch (Exception ignored) {}
         }
     }
 

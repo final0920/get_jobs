@@ -106,6 +106,11 @@ public class ZhilianJobService implements JobPlatformService {
         if (isRunning) {
             log.info("收到停止智联招聘投递任务的请求");
             shouldStop = true;
+            // 协作式停止：worker 若卡在反爬/Playwright 阻塞调用，循环到不了检查点，
+            // execute() 不返回则 finally 无法复位 isRunning，导致无法重启。
+            // 这里直接释放运行状态，旧线程会在下个检查点自行退出。
+            isRunning = false;
+            try { playwrightManager.resumeZhilianMonitoring(); } catch (Exception ignored) {}
         }
     }
 
