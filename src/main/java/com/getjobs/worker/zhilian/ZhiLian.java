@@ -97,6 +97,28 @@ public class ZhiLian {
     }
 
     /**
+     * 从卡片文本解析公司规模（人数），取规模区间下限作为代表；-1=未识别。
+     * 匹配示例：20-99人 / 1000-9999人 / 10000人以上 / 20人以下 / 少于15人。
+     * 用 2~6 位数字，避免误匹配“招5人”等招聘人数。
+     */
+    private int detectCompanyScale(String cardText) {
+        if (cardText == null || cardText.isEmpty()) return -1;
+        java.util.regex.Matcher r;
+        r = java.util.regex.Pattern.compile("(\\d{2,6})\\s*-\\s*(\\d{2,6})\\s*人").matcher(cardText);
+        if (r.find()) { try { return Integer.parseInt(r.group(1)); } catch (Exception ignore) {} }
+        r = java.util.regex.Pattern.compile("(\\d{2,6})\\s*人\\s*以上").matcher(cardText);
+        if (r.find()) { try { return Integer.parseInt(r.group(1)); } catch (Exception ignore) {} }
+        r = java.util.regex.Pattern.compile("(?:少于\\s*)?(\\d{2,6})\\s*人\\s*以下|少于\\s*(\\d{2,6})\\s*人").matcher(cardText);
+        if (r.find()) {
+            try {
+                String g = r.group(1) != null ? r.group(1) : r.group(2);
+                if (g != null) return Integer.parseInt(g);
+            } catch (Exception ignore) {}
+        }
+        return -1;
+    }
+
+    /**
      * 进度回调接口
      */
     @FunctionalInterface
@@ -289,17 +311,25 @@ public class ZhiLian {
 
                 String jobId = extractJobIdFromLink(jobLink);
 
-                // 过滤判断：黑名单关键词 / 代招岗位
+                // 过滤判断：黑名单关键词 / 代招岗位 / 公司规模下限
                 boolean filtered = false;
                 String filterReason = null;
                 if (isBlacklisted(jobTitle, companyName)) {
                     filtered = true;
                     filterReason = "黑名单关键词";
-                } else if (config.isFilterProxy()) {
+                }
+                if (!filtered && (config.isFilterProxy() || config.getMinCompanyScale() > 0)) {
                     String cardText = safeGetCardText(card);
-                    if (isProxyRecruit(cardText)) {
+                    if (config.isFilterProxy() && isProxyRecruit(cardText)) {
                         filtered = true;
                         filterReason = "代招岗位";
+                    }
+                    if (!filtered && config.getMinCompanyScale() > 0) {
+                        int scale = detectCompanyScale(cardText);
+                        if (scale >= 0 && scale < config.getMinCompanyScale()) {
+                            filtered = true;
+                            filterReason = "公司规模不足(" + scale + "人)";
+                        }
                     }
                 }
                 if (filtered) {

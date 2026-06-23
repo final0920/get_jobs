@@ -62,6 +62,9 @@ public class ZhilianService {
         // 是否过滤代招岗位
         config.setFilterProxy(entity.getFilterProxy() != null && entity.getFilterProxy() == 1);
 
+        // 公司规模下限
+        config.setMinCompanyScale(entity.getMinCompanyScale() == null ? 0 : entity.getMinCompanyScale());
+
         // 城市：中文名映射到代码；缺省或“不限”映射为 0
         String city = safeTrim(entity.getCityCode());
         if (city == null || city.isEmpty() || "不限".equals(city)) {
@@ -137,6 +140,7 @@ public class ZhilianService {
             toInsert.setSalary(incoming.getSalary());
             toInsert.setBlackKeywords(incoming.getBlackKeywords());
             toInsert.setFilterProxy(incoming.getFilterProxy());
+            toInsert.setMinCompanyScale(incoming.getMinCompanyScale());
             toInsert.setCreatedAt(now);
             toInsert.setUpdatedAt(now);
             zhilianConfigMapper.insert(toInsert);
@@ -149,6 +153,7 @@ public class ZhilianService {
             if (incoming.getSalary() != null) toUpdate.setSalary(incoming.getSalary());
             if (incoming.getBlackKeywords() != null) toUpdate.setBlackKeywords(incoming.getBlackKeywords());
             if (incoming.getFilterProxy() != null) toUpdate.setFilterProxy(incoming.getFilterProxy());
+            if (incoming.getMinCompanyScale() != null) toUpdate.setMinCompanyScale(incoming.getMinCompanyScale());
             toUpdate.setCreatedAt(first.getCreatedAt());
             toUpdate.setUpdatedAt(now);
             zhilianConfigMapper.updateById(toUpdate);
@@ -228,6 +233,10 @@ public class ZhilianService {
             if (!cols.contains("filter_proxy")) {
                 stmt.execute("ALTER TABLE zhilian_config ADD COLUMN filter_proxy INTEGER DEFAULT 0");
                 log.info("zhilian_config 新增列 filter_proxy");
+            }
+            if (!cols.contains("min_company_scale")) {
+                stmt.execute("ALTER TABLE zhilian_config ADD COLUMN min_company_scale INTEGER DEFAULT 0");
+                log.info("zhilian_config 新增列 min_company_scale");
             }
         } catch (Exception e) {
             log.warn("迁移 zhilian_config 字段失败: {}", e.getMessage());
