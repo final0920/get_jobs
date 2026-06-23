@@ -7,6 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import AnalysisContent from '@/app/yupao/analysis/AnalysisContent'
 import PageHeader from '@/app/components/PageHeader'
 
 interface YupaoConfig {
@@ -19,6 +22,7 @@ interface YupaoConfig {
   companyBlacklist?: string
   degree?: string
   filterProxy?: number
+  activeWithinDays?: number
 }
 
 export default function YupaoPage() {
@@ -32,7 +36,7 @@ export default function YupaoPage() {
 
   const [config, setConfig] = useState<YupaoConfig>({
     keywords: '', cityCode: 'a180', salary: '', sayHi: '',
-    blackKeywords: '', companyBlacklist: '', degree: '', filterProxy: 0,
+    blackKeywords: '', companyBlacklist: '', degree: '', filterProxy: 0, activeWithinDays: 0,
   })
 
   useEffect(() => {
@@ -101,6 +105,7 @@ export default function YupaoPage() {
         c.companyBlacklist = parseListFromDb(data.config.companyBlacklist)
         c.degree = parseListFromDb(data.config.degree)
         c.filterProxy = Number(data.config.filterProxy) === 1 ? 1 : 0
+        c.activeWithinDays = Number(data.config.activeWithinDays) || 0
         if (!c.cityCode) c.cityCode = 'a180'
         setConfig(c)
       }
@@ -160,6 +165,7 @@ export default function YupaoPage() {
         companyBlacklist: serializeListForDb(config.companyBlacklist),
         degree: serializeListForDb(config.degree),
         filterProxy: config.filterProxy ? 1 : 0,
+        activeWithinDays: Number(config.activeWithinDays) || 0,
       }
       const response = await fetch('http://localhost:8888/api/yupao/config', {
         method: 'PUT',
@@ -217,6 +223,13 @@ export default function YupaoPage() {
         }
       />
 
+      <Tabs defaultValue="config" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="config">平台配置</TabsTrigger>
+          <TabsTrigger value="analytics">投递分析</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="config" className="space-y-6 mt-6">
       <Card className="animate-in fade-in slide-in-from-bottom-5 duration-700">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -285,6 +298,18 @@ export default function YupaoPage() {
                 />
               </div>
               <div className="space-y-2">
+                <Label>招聘者活跃过滤</Label>
+                <Select
+                  value={String(config.activeWithinDays ?? 0)}
+                  onChange={(e) => setConfig((c) => ({ ...c, activeWithinDays: Number(e.target.value) }))}
+                >
+                  <option value="0">不限</option>
+                  <option value="1">仅今日活跃</option>
+                  <option value="3">仅三天内活跃</option>
+                  <option value="7">仅本周活跃</option>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label>过滤代招岗位</Label>
                 <label className="flex items-center gap-2 h-10 px-1 cursor-pointer select-none">
                   <input type="checkbox" className="h-4 w-4 accent-sky-500"
@@ -297,6 +322,12 @@ export default function YupaoPage() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="analytics" className="space-y-6 mt-6">
+          <AnalysisContent />
+        </TabsContent>
+      </Tabs>
 
       {showLogoutDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">

@@ -190,6 +190,16 @@ public class YuPao {
             page.navigate(link, new Page.NavigateOptions().setTimeout(60000));
             PlaywrightUtil.sleep(2);
 
+            // 招聘者活跃过滤：仅投递 activeWithinDays 天内活跃的招聘者
+            if (config.getActiveWithinDays() > 0) {
+                int days = estimateActiveDays();
+                if (days >= 0 && days > config.getActiveWithinDays()) {
+                    log.info("招聘者活跃超过{}天(约{}天)，跳过：{}", config.getActiveWithinDays(), days, title);
+                    sendProgress("跳过(招聘者不活跃): " + title, null, null);
+                    return;
+                }
+            }
+
             // 已沟通过则跳过
             if (page.getByText("继续聊", new Page.GetByTextOptions().setExact(true)).count() > 0) {
                 log.info("岗位已沟通过，跳过：{}", title);
@@ -217,14 +227,21 @@ public class YuPao {
         }
     }
 
-    /** 在聊天面板输入并发送打招呼语 */
+    /**
+     * 在聊天面板输入并发送自定义打招呼语。
+     * 说明：鱼泡首次「免费聊」会自动发送平台默认招呼语；自定义打招呼语需在打开的腾讯云 IM
+     * 聊天框里再输入发送。聊天输入框选择器为多候选兜底，首次实跑需在登录态校准。
+     */
     private void sendGreeting() {
         String sayHi = config.getSayHi();
         if (sayHi == null || sayHi.isBlank()) return;
+        PlaywrightUtil.sleep(1); // 等待 IM 聊天面板渲染
         String[] inputSelectors = {
-                "textarea",
+                "textarea[placeholder*='说点']",
+                "textarea[placeholder*='输入']",
+                "div[contenteditable='true']",
                 "[contenteditable='true']",
-                "div[class*='editor'] [contenteditable]",
+                "textarea",
                 "input[type='text'][placeholder*='说']"
         };
         for (String sel : inputSelectors) {
@@ -232,15 +249,53 @@ public class YuPao {
                 Locator input = page.locator(sel).last();
                 if (input.count() > 0 && input.isVisible()) {
                     input.click(new Locator.ClickOptions().setTimeout(3000));
-                    input.fill(sayHi);
                     PlaywrightUtil.sleep(1);
-                    try { input.press("Enter"); } catch (Exception ignored) {}
-                    log.info("已发送打招呼语");
+                    page.keyboard().type(sayHi);
+                    PlaywrightUtil.sleep(1);
+                    Locator sendBtn = page.getByText("发送", new Page.GetByTextOptions().setExact(true)).last();
+                    if (sendBtn.count() > 0 && sendBtn.isVisible()) {
+                        sendBtn.click(new Locator.ClickOptions().setTimeout(3000));
+                    } else {
+                        page.keyboard().press("Enter");
+                    }
+                    log.info("已发送自定义打招呼语");
                     return;
                 }
             } catch (Exception ignored) {}
         }
-        log.debug("未定位到聊天输入框，跳过打招呼语发送（沟通已建立）");
+        log.warn("未定位到聊天输入框，自定义打招呼语未发送（沟通已建立，可能仅发出平台默认语）。聊天输入框选择器需登录态联调。");
+    }
+
+    /** 从详情页估算招聘者最近活跃天数；-1=无法识别 */
+    private int estimateActiveDays() {
+        try {
+            Object r = page.evaluate("() => {\n" +
+                    "  let label = null;\n" +
+                    "  const els = document.querySelectorAll('span,div,p,em,i');\n" +
+                    "  for (const e of els){ if(e.childElementCount===0){ const t=(e.textContent||'').trim(); if(t.length<=12 && t.indexOf('活跃')!==-1){ label=t; break; } } }\n" +
+                    "  if(!label){ const m=document.body.innerText.match(/(刚刚|\\d+分钟前|\\d+小时前|今日|今天|昨日|昨天|前天|\\d+天|本周|近.{0,2}月|\\d+月|一年|更早)[^活]{0,3}活跃/); if(m) label=m[0]; }\n" +
+                    "  return label;\n" +
+                    "}");
+            if (r == null) return -1;
+            return mapActiveLabelToDays(String.valueOf(r));
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    private int mapActiveLabelToDays(String label) {
+        if (label == null) return -1;
+        if (label.contains("刚刚") || label.contains("分钟") || label.contains("小时") || label.contains("今日") || label.contains("今天")) return 0;
+        if (label.contains("昨日") || label.contains("昨天")) return 1;
+        if (label.contains("前天")) return 2;
+        java.util.regex.Matcher md = java.util.regex.Pattern.compile("(\\d+)天").matcher(label);
+        if (md.find()) { try { return Integer.parseInt(md.group(1)); } catch (Exception ignore) {} }
+        if (label.contains("本周") || label.contains("周")) return 7;
+        java.util.regex.Matcher mm = java.util.regex.Pattern.compile("(\\d+)月").matcher(label);
+        if (mm.find()) { try { return Integer.parseInt(mm.group(1)) * 30; } catch (Exception ignore) {} }
+        if (label.contains("月")) return 30;
+        if (label.contains("年") || label.contains("更早")) return 365;
+        return -1;
     }
 
     // ==================== 过滤逻辑 ====================

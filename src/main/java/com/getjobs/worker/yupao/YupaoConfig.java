@@ -33,4 +33,7 @@ public class YupaoConfig {
 
     /** 是否自动过滤代招岗位 */
     private boolean filterProxy;
+
+    /** 招聘者活跃过滤：仅投递该天数内活跃者（0=不限，1=今日，3=三天内，7=本周） */
+    private int activeWithinDays;
 }

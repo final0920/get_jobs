@@ -41,6 +41,9 @@ public class YupaoConfigEntity {
     /** 是否自动过滤代招岗位：1=开启，0=关闭 */
     private Integer filterProxy;
 
+    /** 招聘者活跃过滤：仅投递该天数内活跃的招聘者（0=不限，1=今日，3=三天内，7=本周） */
+    private Integer activeWithinDays;
+
     /** 创建时间 */
     private LocalDateTime createdAt;
 

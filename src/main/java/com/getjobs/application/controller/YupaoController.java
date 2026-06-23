@@ -177,6 +177,43 @@ public class YupaoController {
         }
     }
 
+    // ==================== 数据分析与列表 ====================
+
+    @GetMapping("/stats")
+    public YupaoService.StatsResponse stats(
+            @RequestParam(value = "statuses", required = false) String statuses,
+            @RequestParam(value = "location", required = false) String location,
+            @RequestParam(value = "experience", required = false) String experience,
+            @RequestParam(value = "degree", required = false) String degree,
+            @RequestParam(value = "minK", required = false) Double minK,
+            @RequestParam(value = "maxK", required = false) Double maxK,
+            @RequestParam(value = "keyword", required = false) String keyword
+    ) {
+        return yupaoService.getYupaoStats(splitStatuses(statuses), location, experience, degree, minK, maxK, keyword);
+    }
+
+    @GetMapping("/list")
+    public YupaoService.PagedResult list(
+            @RequestParam(value = "statuses", required = false) String statuses,
+            @RequestParam(value = "location", required = false) String location,
+            @RequestParam(value = "experience", required = false) String experience,
+            @RequestParam(value = "degree", required = false) String degree,
+            @RequestParam(value = "minK", required = false) Double minK,
+            @RequestParam(value = "maxK", required = false) Double maxK,
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "page", required = false, defaultValue = "1") Integer page,
+            @RequestParam(value = "size", required = false, defaultValue = "20") Integer size
+    ) {
+        return yupaoService.listYupaoJobs(splitStatuses(statuses), location, experience, degree, minK, maxK, keyword, page, size);
+    }
+
+    private java.util.List<String> splitStatuses(String statuses) {
+        if (statuses == null || statuses.trim().isEmpty()) return null;
+        return java.util.Arrays.stream(statuses.split(","))
+                .map(String::trim).filter(s -> !s.isEmpty())
+                .collect(java.util.stream.Collectors.toList());
+    }
+
     @GetMapping("/health")
     public ResponseEntity<Map<String, Object>> healthCheck() {
         Map<String, Object> response = new HashMap<>();
