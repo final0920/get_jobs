@@ -235,14 +235,17 @@ public class YuPao {
     private void sendGreeting() {
         String sayHi = config.getSayHi();
         if (sayHi == null || sayHi.isBlank()) return;
-        PlaywrightUtil.sleep(1); // 等待 IM 聊天面板渲染
+        // 鱼泡 IM 聊天输入框为 div.fb-editor[contenteditable]，发送按钮 button.btn-send（实测确认）
+        try {
+            page.waitForSelector("div.fb-editor[contenteditable='true'], .fb-editor",
+                    new Page.WaitForSelectorOptions().setTimeout(8000));
+        } catch (Exception ignored) {}
         String[] inputSelectors = {
-                "textarea[placeholder*='说点']",
-                "textarea[placeholder*='输入']",
+                "div.fb-editor[contenteditable='true']",
+                ".fb-editor",
                 "div[contenteditable='true']",
                 "[contenteditable='true']",
-                "textarea",
-                "input[type='text'][placeholder*='说']"
+                "textarea"
         };
         for (String sel : inputSelectors) {
             try {
@@ -252,7 +255,7 @@ public class YuPao {
                     PlaywrightUtil.sleep(1);
                     page.keyboard().type(sayHi);
                     PlaywrightUtil.sleep(1);
-                    Locator sendBtn = page.getByText("发送", new Page.GetByTextOptions().setExact(true)).last();
+                    Locator sendBtn = page.locator("button.btn-send").last();
                     if (sendBtn.count() > 0 && sendBtn.isVisible()) {
                         sendBtn.click(new Locator.ClickOptions().setTimeout(3000));
                     } else {
@@ -263,7 +266,7 @@ public class YuPao {
                 }
             } catch (Exception ignored) {}
         }
-        log.warn("未定位到聊天输入框，自定义打招呼语未发送（沟通已建立，可能仅发出平台默认语）。聊天输入框选择器需登录态联调。");
+        log.warn("未定位到聊天输入框(.fb-editor)，自定义打招呼语未发送（平台默认招呼语已由“免费聊”自动发出）。");
     }
 
     /** 从详情页估算招聘者最近活跃天数；-1=无法识别 */
