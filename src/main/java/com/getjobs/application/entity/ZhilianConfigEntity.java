@@ -29,8 +29,8 @@ public class ZhilianConfigEntity {
     /** 是否自动过滤代招岗位：1=开启，0=关闭 */
     private Integer filterProxy;
 
-    /** 公司规模下限（人数）：仅投递规模不低于该人数的公司，0=不限 */
-    private Integer minCompanyScale;
+    /** 公司规模上限（人数）：仅投递规模小于该人数的公司，0=不限 */
+    private Integer maxCompanyScale;
 
     /** 创建时间 */
     private LocalDateTime createdAt;

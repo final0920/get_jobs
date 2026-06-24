@@ -19,7 +19,7 @@ interface ZhilianConfig {
   salary?: string
   blackKeywords?: string
   filterProxy?: number
-  minCompanyScale?: number
+  maxCompanyScale?: number
 }
 
 interface Option { name: string; code: string }
@@ -36,7 +36,7 @@ export default function ZhilianPage() {
   const [logoutResult, setLogoutResult] = useState<{ success: boolean; message: string } | null>(null)
   const [backendAvailable, setBackendAvailable] = useState(true)
 
-  const [config, setConfig] = useState<ZhilianConfig>({ keywords: '', cityCode: '', salary: '', blackKeywords: '', filterProxy: 0, minCompanyScale: 0 })
+  const [config, setConfig] = useState<ZhilianConfig>({ keywords: '', cityCode: '', salary: '', blackKeywords: '', filterProxy: 0, maxCompanyScale: 0 })
   const [options, setOptions] = useState<ZhilianOptions>({ city: [] })
   const [loadingConfig, setLoadingConfig] = useState(true)
 
@@ -126,7 +126,7 @@ export default function ZhilianPage() {
         normalized.keywords = parseKeywordsFromDb(data.config.keywords)
         normalized.blackKeywords = parseKeywordsFromDb(data.config.blackKeywords)
         normalized.filterProxy = Number(data.config.filterProxy) === 1 ? 1 : 0
-        normalized.minCompanyScale = Number(data.config.minCompanyScale) || 0
+        normalized.maxCompanyScale = Number(data.config.maxCompanyScale) || 0
         setConfig(normalized)
       }
       if (data.options) setOptions(data.options)
@@ -210,7 +210,7 @@ export default function ZhilianPage() {
         keywords: serializeKeywordsForDb(config.keywords),
         blackKeywords: serializeKeywordsForDb(config.blackKeywords),
         filterProxy: config.filterProxy ? 1 : 0,
-        minCompanyScale: Number(config.minCompanyScale) || 0,
+        maxCompanyScale: Number(config.maxCompanyScale) || 0,
       }
       const response = await fetch('http://localhost:8888/api/zhilian/config', {
         method: 'PUT',
@@ -354,17 +354,17 @@ export default function ZhilianPage() {
                     </label>
                   </div>
                   <div className="space-y-2">
-                    <Label>公司规模下限</Label>
+                    <Label>公司规模上限（只投小于该人数的公司）</Label>
                     <Select
-                      value={String(config.minCompanyScale ?? 0)}
-                      onChange={(e) => setConfig((c) => ({ ...c, minCompanyScale: Number(e.target.value) }))}
+                      value={String(config.maxCompanyScale ?? 0)}
+                      onChange={(e) => setConfig((c) => ({ ...c, maxCompanyScale: Number(e.target.value) }))}
                     >
                       <option value="0">不限</option>
-                      <option value="20">20人以上</option>
-                      <option value="100">100人以上</option>
-                      <option value="500">500人以上</option>
-                      <option value="1000">1000人以上</option>
-                      <option value="10000">10000人以上</option>
+                      <option value="50">小于50人</option>
+                      <option value="100">小于100人</option>
+                      <option value="500">小于500人</option>
+                      <option value="1000">小于1000人</option>
+                      <option value="10000">小于10000人</option>
                     </Select>
                   </div>
                 </div>

@@ -318,17 +318,18 @@ public class ZhiLian {
                     filtered = true;
                     filterReason = "黑名单关键词";
                 }
-                if (!filtered && (config.isFilterProxy() || config.getMinCompanyScale() > 0)) {
+                if (!filtered && (config.isFilterProxy() || config.getMaxCompanyScale() > 0)) {
                     String cardText = safeGetCardText(card);
                     if (config.isFilterProxy() && isProxyRecruit(cardText)) {
                         filtered = true;
                         filterReason = "代招岗位";
                     }
-                    if (!filtered && config.getMinCompanyScale() > 0) {
+                    if (!filtered && config.getMaxCompanyScale() > 0) {
                         int scale = detectCompanyScale(cardText);
-                        if (scale >= 0 && scale < config.getMinCompanyScale()) {
+                        // 仅投递规模小于上限的公司；规模达到/超过上限则过滤
+                        if (scale >= 0 && scale >= config.getMaxCompanyScale()) {
                             filtered = true;
-                            filterReason = "公司规模不足(" + scale + "人)";
+                            filterReason = "公司规模过大(" + scale + "人)";
                         }
                     }
                 }

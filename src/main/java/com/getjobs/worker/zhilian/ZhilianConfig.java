@@ -39,9 +39,9 @@ public class ZhilianConfig {
     private boolean filterProxy;
 
     /**
-     * 公司规模下限（人数）：仅投递规模不低于该人数的公司，0=不限
+     * 公司规模上限（人数）：仅投递规模小于该人数的公司，0=不限
      */
-    private int minCompanyScale;
+    private int maxCompanyScale;
 
 
     // 注意：已改为在 ZhilianJobService 中通过 ConfigService 构建配置
