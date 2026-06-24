@@ -70,16 +70,18 @@ public class ZhiLian {
     private static final String[] PROXY_MARKERS = {"代招", "代理招聘", "招聘代理"};
 
     /**
-     * 是否命中黑名单关键词（匹配岗位标题或公司名）
+     * 是否命中黑名单关键词（匹配岗位标题、公司名，以及整张卡片可见文本/工种标签）
      */
-    private boolean isBlacklisted(String jobTitle, String companyName) {
+    private boolean isBlacklisted(String jobTitle, String companyName, String cardText) {
         List<String> blacks = config.getBlackKeywords();
         if (blacks == null || blacks.isEmpty()) return false;
         String title = jobTitle == null ? "" : jobTitle;
         String company = companyName == null ? "" : companyName;
+        String full = cardText == null ? "" : cardText;
         for (String bk : blacks) {
             if (bk == null || bk.isBlank()) continue;
-            if (title.contains(bk) || company.contains(bk)) return true;
+            // 标题、公司名、整张卡片文本(含工种/职位类别标签)任一命中即过滤
+            if (title.contains(bk) || company.contains(bk) || full.contains(bk)) return true;
         }
         return false;
     }
@@ -311,26 +313,26 @@ public class ZhiLian {
 
                 String jobId = extractJobIdFromLink(jobLink);
 
-                // 过滤判断：黑名单关键词 / 代招岗位 / 公司规模下限
+                // 过滤判断：黑名单关键词 / 代招岗位 / 公司规模上限
+                // 黑名单匹配整张卡片可见文本（标题 + 工种/职位类别标签 + 其它信息），
+                // 避免“销售”这类岗位因标题不含关键词而漏过（如“客户经理/课程顾问”实为销售）。
+                String cardText = safeGetCardText(card);
                 boolean filtered = false;
                 String filterReason = null;
-                if (isBlacklisted(jobTitle, companyName)) {
+                if (isBlacklisted(jobTitle, companyName, cardText)) {
                     filtered = true;
                     filterReason = "黑名单关键词";
                 }
-                if (!filtered && (config.isFilterProxy() || config.getMaxCompanyScale() > 0)) {
-                    String cardText = safeGetCardText(card);
-                    if (config.isFilterProxy() && isProxyRecruit(cardText)) {
+                if (!filtered && config.isFilterProxy() && isProxyRecruit(cardText)) {
+                    filtered = true;
+                    filterReason = "代招岗位";
+                }
+                if (!filtered && config.getMaxCompanyScale() > 0) {
+                    int scale = detectCompanyScale(cardText);
+                    // 仅投递规模小于上限的公司；规模达到/超过上限则过滤
+                    if (scale >= 0 && scale >= config.getMaxCompanyScale()) {
                         filtered = true;
-                        filterReason = "代招岗位";
-                    }
-                    if (!filtered && config.getMaxCompanyScale() > 0) {
-                        int scale = detectCompanyScale(cardText);
-                        // 仅投递规模小于上限的公司；规模达到/超过上限则过滤
-                        if (scale >= 0 && scale >= config.getMaxCompanyScale()) {
-                            filtered = true;
-                            filterReason = "公司规模过大(" + scale + "人)";
-                        }
+                        filterReason = "公司规模过大(" + scale + "人)";
                     }
                 }
                 if (filtered) {
